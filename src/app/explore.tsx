@@ -1,180 +1,543 @@
-import { Image } from 'expo-image';
-import { SymbolView } from 'expo-symbols';
-import { Platform, Pressable, ScrollView, StyleSheet } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useState } from 'react'
+import { useForm } from '@tanstack/react-form'
+import { ActivityIndicator, FlatList, Pressable, StyleSheet, Text, TextInput, View } from 'react-native'
+import { useCarros, useEditarCarro, useEliminarCarro } from '../hooks/use-carros'
+import { Carro } from '../types/carro'
+import { carFieldValidators, type CarroField } from '../utils/car-validation'
 
-import { ExternalLink } from '@/components/external-link';
-import { ThemedText } from '@/components/themed-text';
-import { ThemedView } from '@/components/themed-view';
-import { Collapsible } from '@/components/ui/collapsible';
-import { WebBadge } from '@/components/web-badge';
-import { BottomTabInset, MaxContentWidth, Spacing } from '@/constants/theme';
-import { useTheme } from '@/hooks/use-theme';
+const colors = {
+  red: '#E30613',
+  darkRed: '#B80012',
+  background: '#E9EDF2',
+  surface: '#EEF1F5',
+  inset: '#E3E8EE',
+  text: '#242424',
+  muted: '#737373',
+  border: '#FFFFFF',
+  white: '#FFFFFF',
+  green: '#147A42',
+}
 
-export default function TabTwoScreen() {
-  const safeAreaInsets = useSafeAreaInsets();
-  const insets = {
-    ...safeAreaInsets,
-    bottom: safeAreaInsets.bottom + BottomTabInset + Spacing.three,
-  };
-  const theme = useTheme();
+export default function Explore() {
+  const { data: carros = [], isLoading, error } = useCarros()
+  const [carroEnEdicion, setCarroEnEdicion] = useState<Carro | null>(null)
+  const [carroPorEliminar, setCarroPorEliminar] = useState<Carro | null>(null)
+  const {
+    mutate: editarCarro,
+    isPending: editando,
+    isSuccess: edicionExitosa,
+    isError: errorEdicion,
+    error: detalleErrorEdicion,
+    reset: resetEdicion,
+  } = useEditarCarro()
+  const {
+    mutate: eliminarCarro,
+    isPending: eliminando,
+    isSuccess: eliminacionExitosa,
+    isError: errorEliminacion,
+    error: detalleErrorEliminacion,
+    reset: resetEliminacion,
+  } = useEliminarCarro()
 
-  const contentPlatformStyle = Platform.select({
-    android: {
-      paddingTop: insets.top,
-      paddingLeft: insets.left,
-      paddingRight: insets.right,
-      paddingBottom: insets.bottom,
+  const form = useForm({
+    defaultValues: {
+      marca: '',
+      color: '',
+      modelo: '',
+      tipo: '',
     },
-    web: {
-      paddingTop: Spacing.six,
-      paddingBottom: Spacing.four,
+    onSubmit: ({ value }) => {
+      if (!carroEnEdicion) return
+
+      editarCarro(
+        { id: carroEnEdicion.id, carro: value },
+        { onSuccess: () => setCarroEnEdicion(null) },
+      )
     },
-  });
+  })
+
+  const iniciarEdicion = (carro: Carro) => {
+    resetEdicion()
+    setCarroEnEdicion(carro)
+    form.reset({
+      marca: carro.marca,
+      color: carro.color,
+      modelo: carro.modelo,
+      tipo: carro.tipo,
+    })
+    void form.validateAllFields('change')
+  }
+
+  const renderField = (
+    name: CarroField,
+    label: string,
+  ) => (
+    <form.Field
+      name={name}
+      validators={carFieldValidators(name)}
+    >
+      {(field) => (
+        <View style={styles.field}>
+          <Text style={styles.label}>{label}</Text>
+          <TextInput
+            placeholder={label}
+            placeholderTextColor={colors.muted}
+            value={field.state.value}
+            onChangeText={field.handleChange}
+            style={styles.input}
+            accessibilityLabel={label}
+          />
+          {field.state.meta.errors.map(fieldError => (
+            <Text key={fieldError} style={styles.fieldError}>{fieldError}</Text>
+          ))}
+        </View>
+      )}
+    </form.Field>
+  )
+
+  const actionButton = (
+    title: string,
+    onPress: () => void,
+    variant: 'primary' | 'secondary' | 'danger',
+    disabled = false,
+  ) => (
+    <Pressable
+      accessibilityRole="button"
+      onPress={onPress}
+      disabled={disabled}
+      style={({ pressed }) => [
+        styles.actionButton,
+        variant === 'primary' && styles.primaryButton,
+        variant === 'secondary' && styles.secondaryButton,
+        variant === 'danger' && styles.dangerButton,
+        disabled && styles.disabledButton,
+        pressed && !disabled && styles.pressedButton,
+      ]}
+    >
+      <Text style={[
+        styles.actionButtonText,
+        variant === 'secondary' && styles.secondaryButtonText,
+        variant === 'danger' && styles.dangerButtonText,
+      ]}>
+        {title}
+      </Text>
+    </Pressable>
+  )
 
   return (
-    <ScrollView
-      style={[styles.scrollView, { backgroundColor: theme.background }]}
-      contentInset={insets}
-      contentContainerStyle={[styles.contentContainer, contentPlatformStyle]}>
-      <ThemedView style={styles.container}>
-        <ThemedView style={styles.titleContainer}>
-          <ThemedText type="subtitle">Explore</ThemedText>
-          <ThemedText style={styles.centerText} themeColor="textSecondary">
-            This starter app includes example{'\n'}code to help you get started.
-          </ThemedText>
+    <FlatList
+      style={styles.screen}
+      contentContainerStyle={styles.content}
+      data={carros}
+      keyExtractor={item => item.id}
+      keyboardShouldPersistTaps="handled"
+      ListHeaderComponent={
+        <View style={styles.header}>
+          <Text style={styles.eyebrow}>PATIO TUERCA · MI GARAJE</Text>
+          <Text style={styles.title}>Mis carros</Text>
+          <Text style={styles.subtitle}>Administra la información de tus vehículos.</Text>
+          <View style={styles.summaryCard}>
+            <View style={styles.summaryText}>
+              <Text style={styles.summaryTitle}>Tu garaje</Text>
+              <Text style={styles.summaryCopy}>
+                {carros.length} {carros.length === 1 ? 'vehículo registrado' : 'vehículos registrados'}
+              </Text>
+            </View>
+            <View style={styles.summaryCount}>
+              <Text style={styles.summaryCountText}>{carros.length}</Text>
+            </View>
+          </View>
+        </View>
+      }
+      ListEmptyComponent={
+        isLoading ? (
+          <View style={styles.stateCard}>
+            <ActivityIndicator color={colors.red} size="large" />
+            <Text style={styles.stateText}>Cargando tus carros...</Text>
+          </View>
+        ) : error ? (
+          <View style={styles.stateCard}>
+            <Text style={styles.emptyTitle}>No pudimos cargar tus carros</Text>
+            <Text style={styles.stateText}>{error.message}</Text>
+          </View>
+        ) : (
+          <View style={styles.stateCard}>
+            <Text style={styles.emptyTitle}>Tu garaje está vacío</Text>
+            <Text style={styles.stateText}>Agrega un carro para verlo aquí.</Text>
+          </View>
+        )
+      }
+      renderItem={({ item }) => {
+        const editing = carroEnEdicion?.id === item.id
+        const confirmingDelete = carroPorEliminar?.id === item.id
 
-          <ExternalLink href="https://docs.expo.dev" asChild>
-            <Pressable style={({ pressed }) => pressed && styles.pressed}>
-              <ThemedView type="backgroundElement" style={styles.linkButton}>
-                <ThemedText type="link">Expo documentation</ThemedText>
-                <SymbolView
-                  tintColor={theme.text}
-                  name={{ ios: 'arrow.up.right.square', android: 'link', web: 'link' }}
-                  size={12}
-                />
-              </ThemedView>
-            </Pressable>
-          </ExternalLink>
-        </ThemedView>
+        return (
+          <View style={styles.carCard}>
+            <View style={styles.carCardHeading}>
+              <View style={styles.carInfo}>
+                <Text style={styles.carName}>{item.marca} {item.modelo}</Text>
+                <Text style={styles.carMeta}>{item.tipo} · {item.color}</Text>
+                <Text style={styles.carId}>Registro #{item.id}</Text>
+              </View>
+            </View>
 
-        <ThemedView style={styles.sectionsWrapper}>
-          <Collapsible title="File-based routing">
-            <ThemedText type="small">
-              This app has two screens: <ThemedText type="code">src/app/index.tsx</ThemedText> and{' '}
-              <ThemedText type="code">src/app/explore.tsx</ThemedText>
-            </ThemedText>
-            <ThemedText type="small">
-              The layout file in <ThemedText type="code">src/app/_layout.tsx</ThemedText> sets up
-              the tab navigator.
-            </ThemedText>
-            <ExternalLink href="https://docs.expo.dev/router/introduction">
-              <ThemedText type="linkPrimary">Learn more</ThemedText>
-            </ExternalLink>
-          </Collapsible>
+            {!editing && !confirmingDelete && (
+              <View style={styles.buttonRow}>
+                {actionButton('Editar', () => iniciarEdicion(item), 'secondary', editando || eliminando)}
+                {actionButton('Eliminar', () => {
+                  resetEliminacion()
+                  setCarroPorEliminar(item)
+                }, 'danger', editando || eliminando)}
+              </View>
+            )}
 
-          <Collapsible title="Android, iOS, and web support">
-            <ThemedView type="backgroundElement" style={styles.collapsibleContent}>
-              <ThemedText type="small">
-                You can open this project on Android, iOS, and the web. To open the web version,
-                press <ThemedText type="smallBold">w</ThemedText> in the terminal running this
-                project.
-              </ThemedText>
-              <Image
-                source={require('@/assets/images/tutorial-web.png')}
-                style={styles.imageTutorial}
-              />
-            </ThemedView>
-          </Collapsible>
+            {editing && (
+              <View style={styles.inlinePanel}>
+                <Text style={styles.panelTitle}>Editar vehículo</Text>
+                {renderField('marca', 'Marca')}
+                {renderField('modelo', 'Modelo')}
+                <View style={styles.fieldRow}>
+                  <View style={styles.halfField}>{renderField('color', 'Color')}</View>
+                  <View style={styles.halfField}>{renderField('tipo', 'Tipo')}</View>
+                </View>
+                <form.Subscribe selector={state => state.canSubmit}>
+                  {(canSubmit) => (
+                    <View style={styles.buttonRow}>
+                      {actionButton(
+                        editando ? 'Guardando...' : 'Guardar cambios',
+                        () => void form.handleSubmit(),
+                        'primary',
+                        !canSubmit || editando || eliminando,
+                      )}
+                      {actionButton(
+                        'Cancelar',
+                        () => setCarroEnEdicion(null),
+                        'secondary',
+                        editando,
+                      )}
+                    </View>
+                  )}
+                </form.Subscribe>
+              </View>
+            )}
 
-          <Collapsible title="Images">
-            <ThemedText type="small">
-              For static images, you can use the <ThemedText type="code">@2x</ThemedText> and{' '}
-              <ThemedText type="code">@3x</ThemedText> suffixes to provide files for different
-              screen densities.
-            </ThemedText>
-            <Image source={require('@/assets/images/react-logo.png')} style={styles.imageReact} />
-            <ExternalLink href="https://reactnative.dev/docs/images">
-              <ThemedText type="linkPrimary">Learn more</ThemedText>
-            </ExternalLink>
-          </Collapsible>
-
-          <Collapsible title="Light and dark mode components">
-            <ThemedText type="small">
-              This template has light and dark mode support. The{' '}
-              <ThemedText type="code">useColorScheme()</ThemedText> hook lets you inspect what the
-              user&apos;s current color scheme is, and so you can adjust UI colors accordingly.
-            </ThemedText>
-            <ExternalLink href="https://docs.expo.dev/develop/user-interface/color-themes/">
-              <ThemedText type="linkPrimary">Learn more</ThemedText>
-            </ExternalLink>
-          </Collapsible>
-
-          <Collapsible title="Animations">
-            <ThemedText type="small">
-              This template includes an example of an animated component. The{' '}
-              <ThemedText type="code">src/components/ui/collapsible.tsx</ThemedText> component uses
-              the powerful <ThemedText type="code">react-native-reanimated</ThemedText> library to
-              animate opening this hint.
-            </ThemedText>
-          </Collapsible>
-        </ThemedView>
-        {Platform.OS === 'web' && <WebBadge />}
-      </ThemedView>
-    </ScrollView>
-  );
+            {confirmingDelete && (
+              <View style={styles.confirmPanel}>
+                <Text style={styles.panelTitle}>¿Eliminar este carro?</Text>
+                <Text style={styles.confirmCopy}>Esta acción quitará el vehículo de tu garaje.</Text>
+                <View style={styles.buttonRow}>
+                  {actionButton(
+                    eliminando ? 'Eliminando...' : 'Sí, eliminar',
+                    () => eliminarCarro(item.id, {
+                      onSuccess: () => setCarroPorEliminar(null),
+                    }),
+                    'danger',
+                    eliminando || editando,
+                  )}
+                  {actionButton(
+                    'Cancelar',
+                    () => setCarroPorEliminar(null),
+                    'secondary',
+                    eliminando,
+                  )}
+                </View>
+              </View>
+            )}
+          </View>
+        )
+      }}
+      ListFooterComponent={
+        <View style={styles.feedback}>
+          {edicionExitosa && <Text style={styles.successText}>Carro editado correctamente.</Text>}
+          {errorEdicion && (
+            <Text style={styles.errorText}>Error al editar el carro: {detalleErrorEdicion.message}</Text>
+          )}
+          {eliminacionExitosa && <Text style={styles.successText}>Carro eliminado correctamente.</Text>}
+          {errorEliminacion && (
+            <Text style={styles.errorText}>Error al eliminar el carro: {detalleErrorEliminacion.message}</Text>
+          )}
+        </View>
+      }
+    />
+  )
 }
 
 const styles = StyleSheet.create({
-  scrollView: {
+  screen: {
+    flex: 1,
+    backgroundColor: colors.background,
+  },
+  content: {
+    padding: 16,
+    paddingBottom: 32,
+  },
+  header: {
+    marginBottom: 16,
+  },
+  eyebrow: {
+    color: colors.red,
+    fontSize: 12,
+    fontWeight: '800',
+    letterSpacing: 1,
+    marginBottom: 6,
+  },
+  title: {
+    color: colors.text,
+    fontSize: 24,
+    fontWeight: '800',
+    marginBottom: 5,
+  },
+  subtitle: {
+    color: colors.muted,
+    fontSize: 15,
+    marginBottom: 16,
+  },
+  summaryCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 13,
+    borderRadius: 14,
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.border,
+    shadowColor: '#B8C0CA',
+    shadowOffset: { width: 4, height: 4 },
+    shadowOpacity: 0.55,
+    shadowRadius: 7,
+    elevation: 4,
+  },
+  summaryText: {
     flex: 1,
   },
-  contentContainer: {
-    flexDirection: 'row',
-    justifyContent: 'center',
+  summaryTitle: {
+    color: colors.text,
+    fontSize: 16,
+    fontWeight: '800',
+    marginBottom: 3,
   },
-  container: {
-    maxWidth: MaxContentWidth,
-    flexGrow: 1,
+  summaryCopy: {
+    color: colors.muted,
+    fontSize: 14,
   },
-  titleContainer: {
-    gap: Spacing.three,
+  summaryCount: {
+    minWidth: 34,
+    height: 34,
     alignItems: 'center',
-    paddingHorizontal: Spacing.four,
-    paddingVertical: Spacing.six,
+    justifyContent: 'center',
+    borderRadius: 10,
+    backgroundColor: colors.inset,
+    borderWidth: 1,
+    borderColor: '#FFFFFF',
+    shadowColor: '#B8C0CA',
+    shadowOffset: { width: 2, height: 2 },
+    shadowOpacity: 0.45,
+    shadowRadius: 3,
   },
-  centerText: {
+  summaryCountText: {
+    color: colors.darkRed,
+    fontSize: 16,
+    fontWeight: '800',
+  },
+  carCard: {
+    backgroundColor: colors.surface,
+    borderColor: '#FFFFFF',
+    borderWidth: 1,
+    borderRadius: 15,
+    padding: 14,
+    marginBottom: 12,
+    shadowColor: '#B8C0CA',
+    shadowOffset: { width: 4, height: 4 },
+    shadowOpacity: 0.55,
+    shadowRadius: 7,
+    elevation: 4,
+  },
+  carCardHeading: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 13,
+  },
+  carInfo: {
+    flex: 1,
+  },
+  carName: {
+    color: colors.text,
+    fontSize: 18,
+    fontWeight: '800',
+    marginBottom: 4,
+  },
+  carMeta: {
+    color: colors.muted,
+    fontSize: 14,
+    marginBottom: 4,
+  },
+  carId: {
+    color: '#929292',
+    fontSize: 12,
+  },
+  buttonRow: {
+    flexDirection: 'row',
+    gap: 9,
+  },
+  actionButton: {
+    flex: 1,
+    minHeight: 48,
+    borderRadius: 8,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 10,
+  },
+  primaryButton: {
+    backgroundColor: colors.red,
+    borderColor: '#F35C65',
+    shadowColor: colors.darkRed,
+    shadowOffset: { width: 3, height: 3 },
+    shadowOpacity: 0.35,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  secondaryButton: {
+    backgroundColor: colors.surface,
+    borderColor: '#FFFFFF',
+    shadowColor: '#B8C0CA',
+    shadowOffset: { width: 3, height: 3 },
+    shadowOpacity: 0.5,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  dangerButton: {
+    backgroundColor: colors.inset,
+    borderColor: '#FFFFFF',
+    shadowColor: '#B8C0CA',
+    shadowOffset: { width: 3, height: 3 },
+    shadowOpacity: 0.5,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  actionButtonText: {
+    color: colors.white,
+    fontSize: 15,
+    fontWeight: '700',
     textAlign: 'center',
   },
-  pressed: {
-    opacity: 0.7,
+  secondaryButtonText: {
+    color: colors.text,
   },
-  linkButton: {
+  dangerButtonText: {
+    color: colors.darkRed,
+  },
+  disabledButton: {
+    opacity: 0.55,
+  },
+  pressedButton: {
+    transform: [{ translateY: 1 }],
+    borderBottomWidth: 1,
+    opacity: 0.9,
+  },
+  inlinePanel: {
+    backgroundColor: colors.inset,
+    borderColor: '#FFFFFF',
+    borderWidth: 1,
+    borderRadius: 11,
+    padding: 12,
+    marginTop: 2,
+  },
+  panelTitle: {
+    color: colors.text,
+    fontSize: 16,
+    fontWeight: '800',
+    marginBottom: 11,
+  },
+  field: {
+    marginBottom: 11,
+  },
+  label: {
+    color: colors.text,
+    fontSize: 14,
+    fontWeight: '700',
+    marginBottom: 6,
+  },
+  input: {
+    height: 48,
+    backgroundColor: colors.inset,
+    borderColor: '#FFFFFF',
+    borderWidth: 1,
+    borderRadius: 8,
+    paddingHorizontal: 11,
+    color: colors.text,
+    fontSize: 15,
+    shadowColor: '#B8C0CA',
+    shadowOffset: { width: 2, height: 2 },
+    shadowOpacity: 0.4,
+    shadowRadius: 4,
+  },
+  fieldError: {
+    color: colors.darkRed,
+    fontSize: 12,
+    marginTop: 4,
+  },
+  fieldRow: {
     flexDirection: 'row',
-    paddingHorizontal: Spacing.four,
-    paddingVertical: Spacing.two,
-    borderRadius: Spacing.five,
-    justifyContent: 'center',
-    gap: Spacing.one,
+    gap: 10,
+  },
+  halfField: {
+    flex: 1,
+  },
+  confirmPanel: {
+    padding: 12,
+    borderRadius: 10,
+    backgroundColor: colors.inset,
+    borderColor: '#FFFFFF',
+    borderWidth: 1,
+    marginTop: 2,
+  },
+  confirmCopy: {
+    color: colors.muted,
+    fontSize: 14,
+    lineHeight: 20,
+    marginTop: -5,
+    marginBottom: 12,
+  },
+  stateCard: {
     alignItems: 'center',
+    backgroundColor: colors.surface,
+    borderColor: colors.border,
+    borderWidth: 1,
+    borderRadius: 13,
+    padding: 22,
+    shadowColor: '#B8C0CA',
+    shadowOffset: { width: 4, height: 4 },
+    shadowOpacity: 0.5,
+    shadowRadius: 6,
+    elevation: 3,
   },
-  sectionsWrapper: {
-    gap: Spacing.five,
-    paddingHorizontal: Spacing.four,
-    paddingTop: Spacing.three,
+  emptyTitle: {
+    color: colors.text,
+    fontSize: 16,
+    fontWeight: '800',
+    textAlign: 'center',
   },
-  collapsibleContent: {
-    alignItems: 'center',
+  stateText: {
+    color: colors.muted,
+    fontSize: 14,
+    textAlign: 'center',
+    lineHeight: 19,
+    marginTop: 7,
   },
-  imageTutorial: {
-    width: '100%',
-    aspectRatio: 296 / 171,
-    borderRadius: Spacing.three,
-    marginTop: Spacing.two,
+  feedback: {
+    paddingTop: 4,
   },
-  imageReact: {
-    width: 100,
-    height: 100,
-    alignSelf: 'center',
+  successText: {
+    color: colors.green,
+    fontSize: 14,
+    fontWeight: '700',
+    textAlign: 'center',
+    marginVertical: 4,
   },
-});
+  errorText: {
+    color: colors.darkRed,
+    fontSize: 14,
+    textAlign: 'center',
+    marginVertical: 4,
+  },
+})
